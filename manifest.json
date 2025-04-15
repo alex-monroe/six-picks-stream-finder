@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Ottoneu Six Picks to Streamfinder",
+  "version": "1.0",
+  "description": "Generates a Baseball-Reference Streamfinder config from Ottoneu Six Picks.",
+  "permissions": [
+    "activeTab", // Allows interaction with the currently active tab
+    "scripting",   // Allows injecting scripts into pages
+    "storage"      // To potentially store the generated config (optional)
+  ],
+  "host_permissions": [
+    "https://statsapi.mlb.com/*" // Permission to fetch data from MLB API
+  ],
+  "action": {
+    "default_popup": "popup.html", // The HTML file for the popup UI
+    "default_icon": {             // Optional: Add icons for the extension
+      "16": "images/icon16.png",
+      "48": "images/icon48.png",
+      "128": "images/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js" // The background service worker
+  },
+  "icons": { // Optional: Icons displayed in the extensions management page
+      "16": "images/icon16.png",
+      "48": "images/icon48.png",
+      "128": "images/icon128.png"
+  }
+  // Note: You will need to create placeholder icon files (icon16.png, etc.)
+  // in an 'images' folder or remove the icon entries.
+}
+
