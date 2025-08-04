@@ -159,41 +159,39 @@ async function generateConfigFromPlayers(players, baseConfigString) {
     let newConfig = JSON.parse(JSON.stringify(baseConfig));
     let newPriorityItems = [];
 
-    // Fetch IDs for all players concurrently
-    // Use Promise.allSettled to handle individual fetch failures gracefully
-    const idPromises = players.map(player =>
-        fetchPlayerId(player.name).catch(err => {
-            // Catch errors during fetchPlayerId itself and return an error marker
-            console.error(`Caught error fetching ID for ${player.name}: ${err.message}`);
-            // Send status update for specific player failure
-            chrome.runtime.sendMessage({ action: "updateStatus", text: `Warning: Failed to fetch ID for ${player.name}. Skipping.` });
-            return { error: true, name: player.name, message: err.message }; // Mark as error
-        })
-    );
-    const results = await Promise.all(idPromises); // Wait for all fetches/catches
+    // Fetch IDs for all players concurrently using Promise.allSettled so that
+    // individual failures do not reject the entire batch.
+    const idPromises = players.map(player => fetchPlayerId(player.name));
+    const results = await Promise.allSettled(idPromises);
 
     // Create new priority items for successfully fetched players
     for (let i = 0; i < players.length; i++) {
         const player = players[i];
-        const result = results[i]; // Result can be playerId string or {error: true, ...}
+        const result = results[i]; // Result from Promise.allSettled
 
-        // Check if the result is not an error object and is a valid ID string
-        if (result && !result.error && typeof result === 'string') {
-            const playerId = result;
-            // Determine type based on position (simple check)
-            const type = (player.position === 'SP' || player.position === 'RP') ? 'pit' : 'bat';
-            newPriorityItems.push({
-                type: type,
-                data: playerId,
-                immediate: "", // Keep immediate empty as per base config style
-                priority: 0 // Placeholder, will be renumbered later
-            });
-        } else if (result === null) {
-            // Handle case where fetchPlayerId returned null (not found)
-             chrome.runtime.sendMessage({ action: "updateStatus", text: `Warning: Could not find MLB ID for ${player.name}. Skipping.` });
-             console.warn(`Skipping ${player.name} due to missing ID.`);
+        if (result.status === 'fulfilled') {
+            const value = result.value;
+            if (value && typeof value === 'string') {
+                const playerId = value;
+                // Determine type based on position (simple check)
+                const type = (player.position === 'SP' || player.position === 'RP') ? 'pit' : 'bat';
+                newPriorityItems.push({
+                    type: type,
+                    data: playerId,
+                    immediate: "", // Keep immediate empty as per base config style
+                    priority: 0 // Placeholder, will be renumbered later
+                });
+            } else {
+                // fetchPlayerId returned null or an unexpected value
+                chrome.runtime.sendMessage({ action: "updateStatus", text: `Warning: Could not find MLB ID for ${player.name}. Skipping.` });
+                console.warn(`Skipping ${player.name} due to missing ID.`);
+            }
+        } else {
+            // Handle rejected promises
+            const err = result.reason;
+            console.error(`Error fetching ID for ${player.name}: ${err && err.message ? err.message : err}`);
+            chrome.runtime.sendMessage({ action: "updateStatus", text: `Warning: Failed to fetch ID for ${player.name}. Skipping.` });
         }
-        // Errors during fetch (result.error === true) are already logged/status updated within the map's catch block
     }
 
      if (newPriorityItems.length === 0) {
