@@ -1,11 +1,5 @@
 // --- Background Service Worker (background.js) ---
 
-// Default base config (used only if custom retrieval fails unexpectedly)
-const defaultBaseStreamfinderConfig = {
-    "on_deck": "Y", "include_CLI": "N", "delay": "10000", "ignore": ["108"],
-    "priority": [ {"type": "NoNo", "data": "7", "immediate": "", "priority": 1} ] // Example minimal default
-};
-
 // Variable to hold the base config for the current operation
 let currentOperationContext = {
     baseConfig: null
