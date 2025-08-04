@@ -76,70 +76,50 @@ saveConfigButton.addEventListener('click', () => {
 
 
 // Listener for the generate button click
-generateButton.addEventListener('click', () => {
+generateButton.addEventListener('click', async () => {
     setStatus('Processing...');
     generateButton.disabled = true;
 
-    // 1. Check if a custom base config exists in storage
-    chrome.storage.local.get(['customBaseConfig'], (result) => {
-        if (chrome.runtime.lastError) {
-            setError(`Error retrieving base config: ${chrome.runtime.lastError.message}`);
-            generateButton.disabled = false;
-            return;
-        }
-
-        const baseConfigString = result.customBaseConfig;
+    try {
+        // 1. Check if a custom base config exists in storage
+        const { customBaseConfig: baseConfigString } = await storageGet(['customBaseConfig']);
         if (!baseConfigString) {
-            setError('Error: No base config saved. Please upload and save one first.');
-            generateButton.disabled = false;
-            return;
+            throw new Error('Error: No base config saved. Please upload and save one first.');
         }
 
         // 2. Get the current tab and validate URL
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            const currentTab = tabs[0];
-            if (!currentTab) {
-                setError('Error: Could not get current tab.');
-                generateButton.disabled = false;
-                return;
-            }
+        const tabs = await tabsQuery({ active: true, currentWindow: true });
+        const currentTab = tabs[0];
+        if (!currentTab) {
+            throw new Error('Error: Could not get current tab.');
+        }
 
-            // *** UPDATED URL CHECK: Allow view or createEntry pages ***
-            const currentUrl = currentTab.url;
-            if (!currentUrl || !(currentUrl.includes('ottoneu.fangraphs.com/sixpicks/view/') || currentUrl.includes('ottoneu.fangraphs.com/sixpicks/createEntry'))) {
-                 setError('Error: Not on an Ottoneu Six Picks view or createEntry page.');
-                 generateButton.disabled = false;
-                 return;
-            }
+        // *** UPDATED URL CHECK: Allow view or createEntry pages ***
+        const currentUrl = currentTab.url;
+        if (!currentUrl || !(currentUrl.includes('ottoneu.fangraphs.com/sixpicks/view/') || currentUrl.includes('ottoneu.fangraphs.com/sixpicks/createEntry'))) {
+            throw new Error('Error: Not on an Ottoneu Six Picks view or createEntry page.');
+        }
 
-            // 3. Send message to background to set context *before* injecting
-            chrome.runtime.sendMessage({
-                action: "setBaseConfigContext",
-                baseConfig: baseConfigString
-            }, (response) => {
-                if (chrome.runtime.lastError || response?.status !== 'ok') {
-                    setError(`Error setting base config in background: ${chrome.runtime.lastError?.message || response?.error || 'Unknown error'}`);
-                    generateButton.disabled = false;
-                } else {
-                    setStatus('Base config set. Extracting players...');
-                    // 4. Inject content script (background script will handle the rest)
-                    chrome.scripting.executeScript({
-                        target: { tabId: currentTab.id },
-                        files: ['content.js']
-                    }, (injectionResults) => {
-                         if (chrome.runtime.lastError || !injectionResults || injectionResults.length === 0) {
-                            setError(`Error injecting script: ${chrome.runtime.lastError?.message || 'Unknown error'}`);
-                            // Attempt to clear context in background if injection fails? Maybe not necessary.
-                            generateButton.disabled = false;
-                            return;
-                        }
-                         // If injection is successful, content script will send player data to background.
-                         // Background already has the base config context.
-                    });
-                }
-            });
+        // 3. Send message to background to set context *before* injecting
+        await sendRuntimeMessage({
+            action: "setBaseConfigContext",
+            baseConfig: baseConfigString,
         });
-    });
+
+        setStatus('Base config set. Extracting players...');
+
+        // 4. Inject content script (background script will handle the rest)
+        await executeScriptPromise({
+            target: { tabId: currentTab.id },
+            files: ['content.js'],
+        });
+
+        // If injection is successful, content script will send player data to background.
+        // Background already has the base config context.
+    } catch (error) {
+        setError(error.message || error);
+        generateButton.disabled = false;
+    }
 });
 
 
@@ -170,6 +150,55 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // --- Utility Functions ---
+
+// Promise-based wrappers for Chrome APIs
+function storageGet(keys) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.get(keys, (result) => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+            } else {
+                resolve(result);
+            }
+        });
+    });
+}
+
+function tabsQuery(queryInfo) {
+    return new Promise((resolve, reject) => {
+        chrome.tabs.query(queryInfo, (tabs) => {
+            if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message));
+            } else {
+                resolve(tabs);
+            }
+        });
+    });
+}
+
+function sendRuntimeMessage(message) {
+    return new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(message, (response) => {
+            if (chrome.runtime.lastError || response?.status !== 'ok') {
+                reject(new Error(chrome.runtime.lastError?.message || response?.error || 'Unknown error'));
+            } else {
+                resolve(response);
+            }
+        });
+    });
+}
+
+function executeScriptPromise(details) {
+    return new Promise((resolve, reject) => {
+        chrome.scripting.executeScript(details, (results) => {
+            if (chrome.runtime.lastError || !results || results.length === 0) {
+                reject(new Error(chrome.runtime.lastError?.message || 'Unknown error'));
+            } else {
+                resolve(results);
+            }
+        });
+    });
+}
 
 /**
  * Triggers a browser download for the given text content.
