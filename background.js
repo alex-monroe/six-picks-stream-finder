@@ -1,9 +1,6 @@
 // --- Background Service Worker (background.js) ---
 
-// Variable to hold the base config for the current operation
-let currentOperationContext = {
-    baseConfig: null
-};
+// Base config is stored in chrome.storage.session between operations
 
 // Listen for messages from content scripts or popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -17,65 +14,71 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "setBaseConfigContext") {
         // Store the base config string provided by the popup for the upcoming player processing
         console.log("Setting base config context");
-        currentOperationContext.baseConfig = message.baseConfig;
-        // Basic validation attempt
-        try {
-            if (message.baseConfig) {
-                 JSON.parse(message.baseConfig); // Try parsing to catch early errors
-                 console.log("Base config context set successfully.");
-                 sendResponse({ status: "ok" });
-            } else {
-                 throw new Error("Received empty base config.");
-            }
-        } catch (e) {
-             console.error("Error parsing base config context:", e);
-             currentOperationContext.baseConfig = null; // Clear invalid config
-             sendResponse({ status: "error", error: `Invalid base config format: ${e.message}` });
+        if (!message.baseConfig) {
+            sendResponse({ status: "error", error: "Received empty base config." });
+            return false;
         }
+        try {
+            JSON.parse(message.baseConfig); // Try parsing to catch early errors
+        } catch (e) {
+            console.error("Error parsing base config context:", e);
+            sendResponse({ status: "error", error: `Invalid base config format: ${e.message}` });
+            return false;
+        }
+        chrome.storage.session.set({ baseConfig: message.baseConfig }, () => {
+            if (chrome.runtime.lastError) {
+                console.error("Error saving base config context:", chrome.runtime.lastError);
+                sendResponse({ status: "error", error: `Failed to save base config: ${chrome.runtime.lastError.message}` });
+            } else {
+                console.log("Base config context set successfully.");
+                sendResponse({ status: "ok" });
+            }
+        });
         // Keep listener alive for sendResponse
         return true;
 
     } else if (message.action === "processPlayers") {
         console.log("Processing players request received.");
-        // Retrieve the base config set earlier for this operation
-        const baseConfigString = currentOperationContext.baseConfig;
-        // Clear the context after retrieving it for this operation
-        currentOperationContext.baseConfig = null;
+        // Retrieve and clear the base config set earlier for this operation
+        chrome.storage.session.get('baseConfig', (result) => {
+            const baseConfigString = result.baseConfig;
+            chrome.storage.session.remove('baseConfig', () => {
+                if (!baseConfigString) {
+                    console.error("Process players called but no base config context was set.");
+                    // Send error back to popup
+                    chrome.runtime.sendMessage({ action: "displayError", error: 'Internal Error: Base config context missing.' });
+                    sendResponse({ status: "Error", error: "Base config context missing" });
+                    return;
+                }
 
-        if (!baseConfigString) {
-             console.error("Process players called but no base config context was set.");
-             // Send error back to popup
-             chrome.runtime.sendMessage({ action: "displayError", error: 'Internal Error: Base config context missing.' });
-             sendResponse({ status: "Error", error: "Base config context missing" });
-             return false; // No async response needed here
-        }
+                // Start the process of fetching IDs and generating the config using the provided base
+                generateConfigFromPlayers(message.players, baseConfigString)
+                    .then(finalConfig => {
+                        // *** Generate date-stamped filename ***
+                        const today = new Date();
+                        // Format as YYYY-MM-DD
+                        const formattedDate = today.toISOString().slice(0, 10);
+                        const filename = `streamfinder_config_${formattedDate}.txt`;
+                        console.log(`Generated filename: ${filename}`);
 
-        // Start the process of fetching IDs and generating the config using the provided base
-        generateConfigFromPlayers(message.players, baseConfigString)
-            .then(finalConfig => {
-                // *** Generate date-stamped filename ***
-                const today = new Date();
-                // Format as YYYY-MM-DD
-                const formattedDate = today.toISOString().slice(0, 10);
-                const filename = `streamfinder_config_${formattedDate}.txt`;
-                console.log(`Generated filename: ${filename}`);
-
-                // Send the final config back to the popup for download with the new filename
-                chrome.runtime.sendMessage({
-                    action: "downloadFile",
-                    content: JSON.stringify(finalConfig, null, 2),
-                    filename: filename // Use the generated filename
-                 });
-                // Optional: Send response back to content script if needed
-                sendResponse({ status: "Config generated and sent for download" });
-            })
-            .catch(error => {
-                console.error("Error generating config:", error);
-                // Send error details back to the popup
-                chrome.runtime.sendMessage({ action: "displayError", error: `Error: ${error.message || 'Failed to generate config.'}` });
-                // Optional: Send error back to content script
-                sendResponse({ status: "Error", error: error.message });
+                        // Send the final config back to the popup for download with the new filename
+                        chrome.runtime.sendMessage({
+                            action: "downloadFile",
+                            content: JSON.stringify(finalConfig, null, 2),
+                            filename: filename // Use the generated filename
+                         });
+                        // Optional: Send response back to content script if needed
+                        sendResponse({ status: "Config generated and sent for download" });
+                    })
+                    .catch(error => {
+                        console.error("Error generating config:", error);
+                        // Send error details back to the popup
+                        chrome.runtime.sendMessage({ action: "displayError", error: `Error: ${error.message || 'Failed to generate config.'}` });
+                        // Optional: Send error back to content script
+                        sendResponse({ status: "Error", error: error.message });
+                    });
             });
+        });
         // Keep listener alive for async operations within generateConfigFromPlayers
         return true;
 
@@ -84,7 +87,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
          // Forward the extraction error to the popup
          chrome.runtime.sendMessage({ action: "displayError", error: `Extraction Error: ${message.error}` });
          // Clear any potentially lingering base config context on failure
-         currentOperationContext.baseConfig = null;
+         chrome.storage.session.remove('baseConfig');
          sendResponse({ status: "Extraction error forwarded"});
          return false;
     } else if (message.action === "updateStatus" || message.action === "downloadFile" || message.action === "displayError") {
