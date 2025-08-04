@@ -15,6 +15,11 @@ let currentOperationContext = {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log("Background received message:", message.action, message); // Log action and message
 
+    // Ignore messages originating from the background script itself
+    if (sender.id === chrome.runtime.id) {
+        return false;
+    }
+
     if (message.action === "setBaseConfigContext") {
         // Store the base config string provided by the popup for the upcoming player processing
         console.log("Setting base config context");
@@ -88,6 +93,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
          currentOperationContext.baseConfig = null;
          sendResponse({ status: "Extraction error forwarded"});
          return false;
+    } else if (message.action === "updateStatus" || message.action === "downloadFile" || message.action === "displayError") {
+        // These messages are intended for the popup; background doesn't need to handle them
+        return false;
     }
 
     // Handle other potential messages if needed
