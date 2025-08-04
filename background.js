@@ -6,10 +6,7 @@ const defaultBaseStreamfinderConfig = {
     "priority": [ {"type": "NoNo", "data": "7", "immediate": "", "priority": 1} ] // Example minimal default
 };
 
-// Variable to hold the base config for the current operation
-let currentOperationContext = {
-    baseConfig: null
-};
+// Base config for the current operation is persisted in chrome.storage.session
 
 // Listen for messages from content scripts or popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -18,42 +15,47 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "setBaseConfigContext") {
         // Store the base config string provided by the popup for the upcoming player processing
         console.log("Setting base config context");
-        currentOperationContext.baseConfig = message.baseConfig;
-        // Basic validation attempt
         try {
             if (message.baseConfig) {
-                 JSON.parse(message.baseConfig); // Try parsing to catch early errors
-                 console.log("Base config context set successfully.");
-                 sendResponse({ status: "ok" });
+                JSON.parse(message.baseConfig); // Try parsing to catch early errors
+                chrome.storage.session.set({ baseConfig: message.baseConfig })
+                    .then(() => {
+                        console.log("Base config context set successfully.");
+                        sendResponse({ status: "ok" });
+                    })
+                    .catch(e => {
+                        console.error("Error storing base config context:", e);
+                        sendResponse({ status: "error", error: `Failed to store base config: ${e.message}` });
+                    });
             } else {
-                 throw new Error("Received empty base config.");
+                throw new Error("Received empty base config.");
             }
         } catch (e) {
-             console.error("Error parsing base config context:", e);
-             currentOperationContext.baseConfig = null; // Clear invalid config
-             sendResponse({ status: "error", error: `Invalid base config format: ${e.message}` });
+            console.error("Error parsing base config context:", e);
+            chrome.storage.session.remove("baseConfig");
+            sendResponse({ status: "error", error: `Invalid base config format: ${e.message}` });
         }
-        // Keep listener alive for sendResponse
+        // Keep listener alive for async sendResponse
         return true;
 
     } else if (message.action === "processPlayers") {
         console.log("Processing players request received.");
-        // Retrieve the base config set earlier for this operation
-        const baseConfigString = currentOperationContext.baseConfig;
-        // Clear the context after retrieving it for this operation
-        currentOperationContext.baseConfig = null;
+        (async () => {
+            try {
+                const { baseConfig: baseConfigString } = await chrome.storage.session.get("baseConfig");
+                await chrome.storage.session.remove("baseConfig");
 
-        if (!baseConfigString) {
-             console.error("Process players called but no base config context was set.");
-             // Send error back to popup
-             chrome.runtime.sendMessage({ action: "displayError", error: 'Internal Error: Base config context missing.' });
-             sendResponse({ status: "Error", error: "Base config context missing" });
-             return false; // No async response needed here
-        }
+                if (!baseConfigString) {
+                    console.error("Process players called but no base config context was set.");
+                    // Send error back to popup
+                    chrome.runtime.sendMessage({ action: "displayError", error: 'Internal Error: Base config context missing.' });
+                    sendResponse({ status: "Error", error: "Base config context missing" });
+                    return;
+                }
 
-        // Start the process of fetching IDs and generating the config using the provided base
-        generateConfigFromPlayers(message.players, baseConfigString)
-            .then(finalConfig => {
+                // Start the process of fetching IDs and generating the config using the provided base
+                const finalConfig = await generateConfigFromPlayers(message.players, baseConfigString);
+
                 // *** Generate date-stamped filename ***
                 const today = new Date();
                 // Format as YYYY-MM-DD
@@ -69,15 +71,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                  });
                 // Optional: Send response back to content script if needed
                 sendResponse({ status: "Config generated and sent for download" });
-            })
-            .catch(error => {
+            } catch (error) {
                 console.error("Error generating config:", error);
                 // Send error details back to the popup
                 chrome.runtime.sendMessage({ action: "displayError", error: `Error: ${error.message || 'Failed to generate config.'}` });
                 // Optional: Send error back to content script
                 sendResponse({ status: "Error", error: error.message });
-            });
-        // Keep listener alive for async operations within generateConfigFromPlayers
+            }
+        })();
+        // Keep listener alive for async operations
         return true;
 
     } else if (message.action === "extractionFailed") {
@@ -85,7 +87,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
          // Forward the extraction error to the popup
          chrome.runtime.sendMessage({ action: "displayError", error: `Extraction Error: ${message.error}` });
          // Clear any potentially lingering base config context on failure
-         currentOperationContext.baseConfig = null;
+         chrome.storage.session.remove("baseConfig");
          sendResponse({ status: "Extraction error forwarded"});
          return false;
     }
