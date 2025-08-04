@@ -222,5 +222,7 @@ async function generateConfigFromPlayers(players, baseConfigString) {
 
 // Optional: Log when the background script starts
 console.log("Background service worker started.");
-
-
+// Export functions for unit testing in Node environment
+if (typeof module !== 'undefined') {
+    module.exports = { fetchPlayerId, generateConfigFromPlayers };
+}
