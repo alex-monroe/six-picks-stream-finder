@@ -39,13 +39,13 @@ function extractPlayerPicks() {
                     players.push({ name: name, position: position });
                     console.log(`Found player: ${name}, Position: ${position}`);
                 } else {
-                     console.warn('Skipping row, missing name or position:', row.innerHTML);
+                    console.warn('Skipping row, missing name or position:', row.innerHTML);
                 }
             } else {
-                 console.warn('Skipping row, could not find position or player link:', row.innerHTML);
+                console.warn('Skipping row, could not find position or player link:', row.innerHTML);
             }
         } else {
-             console.log('Skipping row (header/footer/edit?):', row.innerHTML);
+            console.log('Skipping row (header/footer/edit?):', row.innerHTML);
         }
     }
 
@@ -59,32 +59,37 @@ function extractPlayerPicks() {
 
 // --- Main Execution ---
 
-// Extract players immediately when the script is injected
-const extractedPlayers = extractPlayerPicks();
+if (typeof module === 'undefined') {
+    // Extract players immediately when the script is injected
+    const extractedPlayers = extractPlayerPicks();
 
-if (extractedPlayers && extractedPlayers.length > 0) {
-    // Send the extracted player data to the background script
-    console.log('Sending players to background:', extractedPlayers);
-    chrome.runtime.sendMessage({
-        action: "processPlayers",
-        players: extractedPlayers
-    }, (response) => {
-        // Optional: Handle response from background script if needed
-        if (chrome.runtime.lastError) {
-            console.error("Error sending message:", chrome.runtime.lastError.message);
-        } else {
-            console.log("Background script responded:", response);
-        }
-    });
+    if (extractedPlayers && extractedPlayers.length > 0) {
+        // Send the extracted player data to the background script
+        console.log('Sending players to background:', extractedPlayers);
+        chrome.runtime.sendMessage({
+            action: "processPlayers",
+            players: extractedPlayers
+        }, (response) => {
+            // Optional: Handle response from background script if needed
+            if (chrome.runtime.lastError) {
+                console.error("Error sending message:", chrome.runtime.lastError.message);
+            } else {
+                console.log("Background script responded:", response);
+            }
+        });
+    } else {
+        // Send an error message back to the popup via the background script
+        console.error("Failed to extract players. Sending error message.");
+        chrome.runtime.sendMessage({
+            action: "extractionFailed",
+            error: "Could not find or parse the player table on the page."
+        });
+    }
+
+    // Note: This script sends the data and finishes.
+    // The background script handles the API calls and config generation.
 } else {
-    // Send an error message back to the popup via the background script
-     console.error("Failed to extract players. Sending error message.");
-     chrome.runtime.sendMessage({
-         action: "extractionFailed",
-         error: "Could not find or parse the player table on the page."
-     });
+    // Export for unit testing
+    module.exports = { extractPlayerPicks };
 }
-
-// Note: This script sends the data and finishes.
-// The background script handles the API calls and config generation.
 
