@@ -1,0 +1,29 @@
+name: Build and Release Extension
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: npm ci
+      - run: npm test
+      - name: Package extension
+        run: |
+          mkdir -p dist
+          zip -r dist/six-picks-stream-finder.zip manifest.json background.js content.js popup.html popup.js images
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/six-picks-stream-finder.zip
