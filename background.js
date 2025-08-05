@@ -16,8 +16,13 @@ function logError(context, error) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log("Background received message:", message.action, message); // Log action and message
 
-    // Ignore messages originating from the background script itself
-    if (sender.id === chrome.runtime.id) {
+    // Ignore messages dispatched from the background itself. Such messages
+    // do not include a sender URL, whereas messages from the popup or content
+    // scripts do. Previously we compared sender.id to chrome.runtime.id, but
+    // the popup shares the same ID which caused legitimate requests to be
+    // ignored, leading to "The message port closed before a response was
+    // received" errors in the popup.
+    if (sender.id === chrome.runtime.id && !sender.url) {
         return false;
     }
 
