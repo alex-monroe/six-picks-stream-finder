@@ -4,6 +4,9 @@ const fs = require('fs');
 
 test('generate config and upload to stream finder', async () => {
   const extensionPath = path.join(__dirname, '..');
+  const videoDir = path.join(__dirname, '..', 'playwright-artifacts');
+  fs.mkdirSync(videoDir, { recursive: true });
+
   const context = await chromium.launchPersistentContext('', {
     headless: false,
     ignoreHTTPSErrors: true,
@@ -11,7 +14,8 @@ test('generate config and upload to stream finder', async () => {
     args: [
       `--disable-extensions-except=${extensionPath}`,
       `--load-extension=${extensionPath}`
-    ]
+    ],
+    recordVideo: { dir: videoDir }
   });
 
   // Stub MLB Stats API fetch in the service worker so tests do not rely on external network.
