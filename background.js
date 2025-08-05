@@ -1,6 +1,10 @@
 // --- Background Service Worker (background.js) ---
 
-// Base config is stored in chrome.storage.session between operations
+// Base config is stored temporarily between popup and content script
+// Use session storage when available; fall back to local storage otherwise.
+// Provide a minimal stub when chrome.storage is unavailable (e.g., during testing).
+const storageApi = (typeof chrome !== 'undefined' && chrome.storage) ? chrome.storage : { local: { set: (_o, cb) => cb && cb(), get: (_k, cb) => cb && cb({}), remove: (_k, cb) => cb && cb() } };
+const sessionStorage = storageApi.session || storageApi.local;
 
 // Listen for messages from content scripts or popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -25,7 +29,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             sendResponse({ status: "error", error: `Invalid base config format: ${e.message}` });
             return false;
         }
-        chrome.storage.session.set({ baseConfig: message.baseConfig }, () => {
+        sessionStorage.set({ baseConfig: message.baseConfig }, () => {
             if (chrome.runtime.lastError) {
                 console.error("Error saving base config context:", chrome.runtime.lastError);
                 sendResponse({ status: "error", error: `Failed to save base config: ${chrome.runtime.lastError.message}` });
@@ -40,9 +44,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } else if (message.action === "processPlayers") {
         console.log("Processing players request received.");
         // Retrieve and clear the base config set earlier for this operation
-        chrome.storage.session.get('baseConfig', (result) => {
+        sessionStorage.get('baseConfig', (result) => {
+            if (chrome.runtime.lastError) {
+                console.error("Error retrieving base config context:", chrome.runtime.lastError);
+                sendResponse({ status: "Error", error: `Failed to retrieve base config: ${chrome.runtime.lastError.message}` });
+                return;
+            }
+
             const baseConfigString = result.baseConfig;
-            chrome.storage.session.remove('baseConfig', () => {
+            sessionStorage.remove('baseConfig', () => {
+                if (chrome.runtime.lastError) {
+                    console.error("Error clearing base config context:", chrome.runtime.lastError);
+                }
                 if (!baseConfigString) {
                     console.error("Process players called but no base config context was set.");
                     // Send error back to popup
@@ -87,7 +100,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
          // Forward the extraction error to the popup
          chrome.runtime.sendMessage({ action: "displayError", error: `Extraction Error: ${message.error}` });
          // Clear any potentially lingering base config context on failure
-         chrome.storage.session.remove('baseConfig');
+         sessionStorage.remove('baseConfig');
          sendResponse({ status: "Extraction error forwarded"});
          return false;
     } else if (message.action === "updateStatus" || message.action === "downloadFile" || message.action === "displayError") {
