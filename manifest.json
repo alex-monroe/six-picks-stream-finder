@@ -9,7 +9,8 @@
     "storage"
   ],
   "host_permissions": [
-    "https://statsapi.mlb.com/*"
+    "https://statsapi.mlb.com/*",
+    "https://ottoneu.fangraphs.com/*"
   ],
   "action": {
     "default_popup": "popup.html",
