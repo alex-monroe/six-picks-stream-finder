@@ -6,6 +6,12 @@
 const storageApi = (typeof chrome !== 'undefined' && chrome.storage) ? chrome.storage : { local: { set: (_o, cb) => cb && cb(), get: (_k, cb) => cb && cb({}), remove: (_k, cb) => cb && cb() } };
 const sessionStorage = storageApi.session || storageApi.local;
 
+// Standardized error logging helper
+function logError(context, error) {
+    const details = error && error.stack ? error.stack : error;
+    console.error(`[Six Picks Error] ${context}`, details);
+}
+
 // Listen for messages from content scripts or popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log("Background received message:", message.action, message); // Log action and message
@@ -25,13 +31,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         try {
             JSON.parse(message.baseConfig); // Try parsing to catch early errors
         } catch (e) {
-            console.error("Error parsing base config context:", e);
+            logError("Error parsing base config context", e);
             sendResponse({ status: "error", error: `Invalid base config format: ${e.message}` });
             return false;
         }
         sessionStorage.set({ baseConfig: message.baseConfig }, () => {
             if (chrome.runtime.lastError) {
-                console.error("Error saving base config context:", chrome.runtime.lastError);
+                logError("Error saving base config context", chrome.runtime.lastError);
                 sendResponse({ status: "error", error: `Failed to save base config: ${chrome.runtime.lastError.message}` });
             } else {
                 console.log("Base config context set successfully.");
@@ -46,7 +52,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Retrieve and clear the base config set earlier for this operation
         sessionStorage.get('baseConfig', (result) => {
             if (chrome.runtime.lastError) {
-                console.error("Error retrieving base config context:", chrome.runtime.lastError);
+                logError("Error retrieving base config context", chrome.runtime.lastError);
                 sendResponse({ status: "Error", error: `Failed to retrieve base config: ${chrome.runtime.lastError.message}` });
                 return;
             }
@@ -54,10 +60,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             const baseConfigString = result.baseConfig;
             sessionStorage.remove('baseConfig', () => {
                 if (chrome.runtime.lastError) {
-                    console.error("Error clearing base config context:", chrome.runtime.lastError);
+                    logError("Error clearing base config context", chrome.runtime.lastError);
                 }
                 if (!baseConfigString) {
-                    console.error("Process players called but no base config context was set.");
+                    logError("Process players called but no base config context was set");
                     // Send error back to popup
                     chrome.runtime.sendMessage({ action: "displayError", error: 'Internal Error: Base config context missing.' });
                     sendResponse({ status: "Error", error: "Base config context missing" });
@@ -84,7 +90,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                         sendResponse({ status: "Config generated and sent for download" });
                     })
                     .catch(error => {
-                        console.error("Error generating config:", error);
+                        logError("Error generating config", error);
                         // Send error details back to the popup
                         chrome.runtime.sendMessage({ action: "displayError", error: `Error: ${error.message || 'Failed to generate config.'}` });
                         // Optional: Send error back to content script
@@ -142,7 +148,7 @@ async function fetchPlayerId(playerName) {
             return null; // Player not found
         }
     } catch (error) {
-        console.error(`Error fetching ID for ${playerName}:`, error);
+        logError(`Error fetching ID for ${playerName}`, error);
         // Propagate a more specific error
         throw new Error(`Failed to fetch ID for ${playerName}. ${error.message}`);
     }
@@ -168,7 +174,7 @@ async function generateConfigFromPlayers(players, baseConfigString) {
         }
         console.log("Successfully parsed base config.");
     } catch (e) {
-        console.error("Failed to parse provided base config string:", e);
+        logError("Failed to parse provided base config string", e);
         // Re-throw to inform the user of the bad config.
         throw new Error(`Invalid base configuration format: ${e.message}`);
     }
@@ -207,7 +213,7 @@ async function generateConfigFromPlayers(players, baseConfigString) {
         } else {
             // Handle rejected promises
             const err = result.reason;
-            console.error(`Error fetching ID for ${player.name}: ${err && err.message ? err.message : err}`);
+            logError(`Error fetching ID for ${player.name}`, err);
             chrome.runtime.sendMessage({ action: "updateStatus", text: `Warning: Failed to fetch ID for ${player.name}. Skipping.` });
         }
     }

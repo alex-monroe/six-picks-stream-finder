@@ -7,6 +7,12 @@ const configStatusDiv = document.getElementById('configStatus');
 
 let selectedFileContent = null; // Store content of the selected file temporarily
 
+// Standardized error logging helper
+function logError(context, error) {
+    const details = error && error.stack ? error.stack : error;
+    console.error(`[Six Picks Error] ${context}`, details);
+}
+
 // --- Initialization ---
 
 // Check storage on popup open to see if a custom config exists
@@ -136,8 +142,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             downloadConfig(message.content, message.filename);
             setStatus('Configuration generated. Download started.');
         } catch (e) {
-             console.error("Download trigger failed:", e);
-             setError('Error initiating download.');
+            logError("Download trigger failed", e);
+            setError('Error initiating download.');
         }
          generateButton.disabled = false;
     } else if (message.action === "displayError") {
@@ -209,7 +215,7 @@ function downloadConfig(textContent, filename) {
     // Create a Blob (Binary Large Object) from the text content
     // Ensure textContent is a string, as message.content should already be stringified JSON
     if (typeof textContent !== 'string') {
-        console.error('Invalid content for download:', textContent);
+        logError('Invalid content for download', textContent);
         setError('Internal error: Invalid configuration format for download.');
         return; // Prevent download attempt with invalid content
     }
@@ -245,7 +251,7 @@ function setError(errorMessage) {
     statusDiv.textContent = errorMessage;
     statusDiv.classList.add('error');
     statusDiv.classList.remove('success');
-    console.error("Extension Error:", errorMessage);
+    logError("Extension Error", errorMessage);
 }
 
 // Function to update the config status message
