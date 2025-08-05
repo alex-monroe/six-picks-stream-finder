@@ -4,7 +4,8 @@
   "description": "",
   "main": "background.js",
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "test:e2e": "xvfb-run -a playwright test"
   },
   "keywords": [],
   "author": "",
@@ -12,6 +13,10 @@
   "type": "commonjs",
   "devDependencies": {
     "jest": "^30.0.5",
-    "jest-environment-jsdom": "^30.0.5"
+    "jest-environment-jsdom": "^30.0.5",
+    "@playwright/test": "^1.41.1"
+  },
+  "jest": {
+    "testMatch": ["**/tests/**/*.test.js"]
   }
 }
