@@ -93,18 +93,20 @@ generateButton.addEventListener('click', async () => {
             throw new Error('Error: No base config saved. Please upload and save one first.');
         }
 
-        // 2. Get the current tab and validate URL
-        const tabs = await tabsQuery({ active: true, currentWindow: true });
-        const currentTab = tabs[0];
+        // 2. Find a Six Picks tab in the current window
+        const tabs = await tabsQuery({ currentWindow: true });
+        const currentTab = tabs.find(tab => {
+            const url = tab.url || '';
+            return (
+                url.includes('ottoneu.fangraphs.com/sixpicks/view/') ||
+                url.includes('ottoneu.fangraphs.com/sixpicks/createEntry')
+            );
+        });
         if (!currentTab) {
-            throw new Error('Error: Could not get current tab.');
-        }
-
-        // *** UPDATED URL CHECK: Allow view or createEntry pages ***
-        const currentUrl = currentTab.url;
-        if (!currentUrl || !(currentUrl.includes('ottoneu.fangraphs.com/sixpicks/view/') || currentUrl.includes('ottoneu.fangraphs.com/sixpicks/createEntry'))) {
             throw new Error('Error: Not on an Ottoneu Six Picks view or createEntry page.');
         }
+
+        const currentUrl = currentTab.url;
 
         // 3. Send message to background to set context *before* injecting
         await sendRuntimeMessage({
