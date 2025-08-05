@@ -12,8 +12,8 @@ test('generate config and upload to stream finder', async () => {
     ]
   });
 
-  const background = await context.waitForEvent('backgroundpage');
-  const extensionId = background.url().split('/')[2];
+  const serviceWorker = await context.waitForEvent('serviceworker');
+  const extensionId = serviceWorker.url().split('/')[2];
 
   const ottoneuPage = await context.newPage();
   await ottoneuPage.goto('https://ottoneu.fangraphs.com/sixpicks/view/74779');
