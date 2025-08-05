@@ -1,0 +1,19 @@
+name: Run e2e tests
+description: Install dependencies and run Playwright end-to-end tests
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: npm
+    - name: Install dependencies
+      run: npm ci
+      shell: bash
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps
+      shell: bash
+    - name: Run e2e tests
+      run: xvfb-run -a npm run test:e2e
+      shell: bash
