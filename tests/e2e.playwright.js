@@ -14,12 +14,8 @@ test('generate config and upload to stream finder', async () => {
     ]
   });
 
-  // Stub MLB Stats API responses so tests do not rely on external network.
-  let mockId = 1;
-  await context.route('https://statsapi.mlb.com/*', route => {
-    const body = JSON.stringify({ people: [{ id: mockId++ }] });
-    route.fulfill({ contentType: 'application/json', body });
-  });
+  // Stub MLB Stats API fetch in the service worker so tests do not rely on external network.
+
 
   // Extension service worker may already be running by the time this test
   // starts listening for it. Check for an existing worker first so we don't
@@ -31,6 +27,15 @@ test('generate config and upload to stream finder', async () => {
   const extensionId = serviceWorker.url().split('/')[2];
   console.log('Loaded extension with id', extensionId);
   serviceWorker.on('console', msg => console.log('sw console:', msg.text()));
+
+  // Mock fetch in the service worker to avoid network dependency
+  await serviceWorker.evaluate(() => {
+    let mockId = 1;
+    self.fetch = () => Promise.resolve(new Response(
+      JSON.stringify({ people: [{ id: mockId++ }] }),
+      { headers: { 'Content-Type': 'application/json' } }
+    ));
+  });
 
   const ottoneuPage = await context.newPage();
   console.log('Navigating to Ottoneu six picks page');
