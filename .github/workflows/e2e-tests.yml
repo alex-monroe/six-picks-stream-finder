@@ -11,3 +11,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/run-e2e-tests
+      - name: Upload Playwright video
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-video
+          path: playwright-artifacts
+          if-no-files-found: ignore
