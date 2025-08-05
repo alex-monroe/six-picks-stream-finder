@@ -1,6 +1,12 @@
 // --- Content Script (content.js) ---
 // This script runs in the context of the Ottoneu Six Picks page.
 
+// Standardized error logging helper
+function logError(context, error) {
+    const details = error && error.stack ? error.stack : error;
+    console.error(`[Six Picks Error] ${context}`, details);
+}
+
 /**
  * Extracts player names and positions from the Six Picks table.
  * @returns {Array<Object>|null} An array of objects {name: string, position: string}, or null if the table is not found.
@@ -12,7 +18,7 @@ function extractPlayerPicks() {
     // Based on the example HTML, it's the first table inside div.wideleft inside div#content
     const table = document.querySelector('#content .wideleft table');
     if (!table || !table.tBodies || table.tBodies.length === 0) {
-        console.error('Could not find the player picks table.');
+        logError('Could not find the player picks table.');
         return null; // Indicate failure
     }
 
@@ -50,7 +56,7 @@ function extractPlayerPicks() {
     }
 
     if (players.length === 0) {
-        console.error('No players extracted from the table.');
+        logError('No players extracted from the table.');
         return null;
     }
 
@@ -72,14 +78,14 @@ if (typeof module === 'undefined') {
         }, (response) => {
             // Optional: Handle response from background script if needed
             if (chrome.runtime.lastError) {
-                console.error("Error sending message:", chrome.runtime.lastError.message);
+                logError("Error sending message", chrome.runtime.lastError);
             } else {
                 console.log("Background script responded:", response);
             }
         });
     } else {
         // Send an error message back to the popup via the background script
-        console.error("Failed to extract players. Sending error message.");
+        logError("Failed to extract players. Sending error message.");
         chrome.runtime.sendMessage({
             action: "extractionFailed",
             error: "Could not find or parse the player table on the page."
